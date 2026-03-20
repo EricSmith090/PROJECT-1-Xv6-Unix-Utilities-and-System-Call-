@@ -91,3 +91,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// Lưu tracemask vào process hiện tại để theo dõi syscall
+uint64
+sys_trace(void)
+{
+  int mask;
+  argint(0, &mask);          // Lấy tham số đầu tiên (mask) từ user
+  myproc()->tracemask = mask; // Lưu mask vào process hiện tại
+  return 0;
+}
