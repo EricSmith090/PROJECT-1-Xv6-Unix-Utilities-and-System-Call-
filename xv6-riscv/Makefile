@@ -148,6 +148,7 @@ UPROGS=\
 	$U/_xargs\
 	$U/_tree\
 	$U/_procinfortest
+	$U/_trace\
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
 

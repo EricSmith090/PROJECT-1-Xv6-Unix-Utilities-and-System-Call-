@@ -289,6 +289,7 @@ kfork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+  np->tracemask = p->tracemask;  // Sao chép tracemask từ process cha sang con
 
   pid = np->pid;
 
