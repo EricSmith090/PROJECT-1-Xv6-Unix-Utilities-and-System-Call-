@@ -5,13 +5,14 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "vm.h"
 
 uint64
 sys_exit(void)
 {
   int n;
   argint(0, &n);
-  exit(n);
+  kexit(n);
   return 0;  // not reached
 }
 
@@ -24,7 +25,7 @@ sys_getpid(void)
 uint64
 sys_fork(void)
 {
-  return fork();
+  return kfork();
 }
 
 uint64
@@ -32,24 +33,39 @@ sys_wait(void)
 {
   uint64 p;
   argaddr(0, &p);
-  return wait(p);
+  return kwait(p);
 }
 
 uint64
 sys_sbrk(void)
 {
   uint64 addr;
+  int t;
   int n;
 
   argint(0, &n);
+  argint(1, &t);
   addr = myproc()->sz;
-  if(growproc(n) < 0)
-    return -1;
+
+  if(t == SBRK_EAGER || n < 0) {
+    if(growproc(n) < 0) {
+      return -1;
+    }
+  } else {
+    // Lazily allocate memory for this process: increase its memory
+    // size but don't allocate memory. If the processes uses the
+    // memory, vmfault() will allocate it.
+    if(addr + n < addr)
+      return -1;
+    if(addr + n > TRAPFRAME)
+      return -1;
+    myproc()->sz += n;
+  }
   return addr;
 }
 
 uint64
-sys_sleep(void)
+sys_pause(void)
 {
   int n;
   uint ticks0;
@@ -76,7 +92,7 @@ sys_kill(void)
   int pid;
 
   argint(0, &pid);
-  return kill(pid);
+  return kkill(pid);
 }
 
 // return how many clock tick interrupts have occurred
@@ -92,12 +108,38 @@ sys_uptime(void)
   return xticks;
 }
 
-// Lưu tracemask vào process hiện tại để theo dõi syscall
+// procinfor
 uint64
-sys_trace(void)
+sys_procinfo(void)
 {
-  int mask;
-  argint(0, &mask);          // Lấy tham số đầu tiên (mask) từ user
-  myproc()->tracemask = mask; // Lưu mask vào process hiện tại
+  int pid;
+  uint64 addr;
+  struct proc *p;
+  struct procinfo info;
+  extern struct proc proc[];
+
+  argint(0, &pid);
+  argaddr(1, &addr);
+
+  int found = 0;
+  for(p = proc; p < &proc[64]; p++) {
+    acquire(&p->lock);
+    if(p->pid == pid && p->state != 0) {
+      info.pid = p->pid;
+      info.ppid = p->parent ? p->parent->pid : 0;
+      info.state = p->state;
+      info.sz = p->sz;
+      for(int i=0; i<16; i++) info.name[i] = p->name[i];
+      release(&p->lock);
+      found = 1;
+      break;
+    }
+    release(&p->lock);
+  }
+
+  if(!found) return -1;
+
+  if(copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+    return -1;
   return 0;
 }
